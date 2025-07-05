@@ -13,7 +13,10 @@
     "lint": "eslint --ext .ts src/",
     "lint:fix": "eslint --ext .ts src/ --fix",
     "type-check": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "prepare": "husky",
+    "commitlint": "commitlint --edit",
+    "commitlint:check": "commitlint --from HEAD~1 --to HEAD --verbose"
   },
   "keywords": [
     "telegram",
@@ -33,16 +36,34 @@
     "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.10.0",
     "@types/winston": "^2.4.4",
     "@typescript-eslint/eslint-plugin": "^6.12.0",
     "@typescript-eslint/parser": "^6.12.0",
     "eslint": "^8.54.0",
+    "husky": "^9.1.7",
     "jest": "^30.0.4",
+    "lint-staged": "^16.1.2",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.1",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.3.2"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,js}": [
+      "eslint --fix"
+    ],
+    "src/**/*.ts": [
+      "npm run type-check"
+    ],
+    "tests/**/*.{ts,js}": [
+      "eslint --fix"
+    ],
+    "*.{md,json}": [
+      "echo 'Checking formatting...'"
+    ]
   }
 }
