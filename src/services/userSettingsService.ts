@@ -2,8 +2,14 @@ import fs from "fs";
 
 import path from "path";
 
-import { UserSettings, ResponseStyle, StyleDescription } from "../types";
+import {
+  UserSettings,
+  ResponseStyle,
+  StyleDescription,
+  ContextSettings,
+} from "../types";
 
+import { DEFAULT_CONTEXT_SETTINGS } from "./contextService";
 import { logger } from "./loggerService";
 
 /**
@@ -122,6 +128,10 @@ export class UserSettingsService {
         // Преобразуем массив в Map для быстрого доступа
         this.userSettings.clear();
         settings.forEach((setting) => {
+          // Миграция: добавляем настройки контекста для старых пользователей
+          if (!setting.contextSettings) {
+            setting.contextSettings = { ...DEFAULT_CONTEXT_SETTINGS };
+          }
           this.userSettings.set(setting.userId, setting);
         });
 
@@ -174,6 +184,7 @@ export class UserSettingsService {
         userId,
         username,
         responseStyle: "friendly", // По умолчанию дружелюбный стиль
+        contextSettings: { ...DEFAULT_CONTEXT_SETTINGS }, // Настройки контекста по умолчанию
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -183,6 +194,7 @@ export class UserSettingsService {
 
       logger.logUserActivity(userId, username, "settings_created", {
         defaultStyle: settings.responseStyle,
+        contextEnabled: settings.contextSettings.enabled,
       });
     }
 
@@ -274,6 +286,43 @@ export class UserSettingsService {
     });
 
     return stats;
+  }
+
+  /**
+   * Обновляет настройки контекста пользователя
+   * @param userId - ID пользователя
+   * @param contextSettings - новые настройки контекста
+   * @param username - имя пользователя (опционально)
+   * @returns обновленные настройки
+   */
+  public updateUserContextSettings(
+    userId: number,
+    contextSettings: Partial<ContextSettings>,
+    username?: string
+  ): UserSettings {
+    const settings = this.getUserSettings(userId, username);
+
+    // Обновляем только переданные настройки
+    settings.contextSettings = {
+      ...settings.contextSettings,
+      ...contextSettings,
+    };
+
+    settings.updatedAt = new Date().toISOString();
+
+    // Обновляем username если передан
+    if (username) {
+      settings.username = username;
+    }
+
+    this.userSettings.set(userId, settings);
+    this.saveSettings();
+
+    logger.logUserActivity(userId, username, "context_settings_changed", {
+      newSettings: contextSettings,
+    });
+
+    return settings;
   }
 
   /**

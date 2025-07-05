@@ -7,6 +7,7 @@ import {
 
 import { promptConfig, basePromptVariants } from "../config";
 import { ResponseStyle } from "../types";
+
 import { logger } from "./loggerService";
 
 /**
@@ -22,14 +23,16 @@ export class GeminiService {
   }
 
   /**
-   * Генерирует текстовый ответ на основе промта с учетом стиля пользователя
+   * Генерирует текстовый ответ на основе промта с учетом стиля пользователя и контекста
    * @param prompt - текст запроса пользователя
    * @param responseStyle - стиль ответа пользователя (опционально)
+   * @param context - контекст предыдущих сообщений (опционально)
    * @returns Promise<string> - ответ от Gemini
    */
   async generateTextResponse(
     prompt: string,
-    responseStyle?: ResponseStyle
+    responseStyle?: ResponseStyle,
+    context?: string
   ): Promise<string> {
     const startTime = Date.now();
 
@@ -39,12 +42,15 @@ export class GeminiService {
         ? basePromptVariants[responseStyle]
         : promptConfig.basePrompt;
 
-      // Объединяем базовый промт с запросом пользователя
-      const fullPrompt = `${basePrompt}\n\nЗапрос пользователя: ${prompt}`;
+      // Объединяем базовый промт с контекстом и запросом пользователя
+      const fullPrompt = `${basePrompt}${
+        context || ""
+      }\n\nЗапрос пользователя: ${prompt}`;
 
       logger.debug("Отправка запроса к Gemini API", {
         promptLength: fullPrompt.length,
         responseStyle: responseStyle || "default",
+        hasContext: !!context,
         model: "gemini-2.5-flash",
       });
 

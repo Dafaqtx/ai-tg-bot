@@ -54,12 +54,40 @@ export type ResponseStyle =
   | "calm"; // Спокойный - расслабляющие и успокаивающие ответы
 
 /**
+ * Типы сообщений в контексте
+ */
+export type MessageType = "text" | "audio" | "image" | "voice";
+
+/**
+ * Сообщение в контексте диалога
+ */
+export interface ContextMessage {
+  id: string; // Уникальный идентификатор сообщения
+  role: "user" | "assistant"; // Роль отправителя
+  content: string; // Содержимое сообщения
+  messageType: MessageType; // Тип сообщения
+  timestamp: string; // Время отправки
+  tokenCount?: number; // Примерное количество токенов (опционально)
+}
+
+/**
+ * Настройки контекста для пользователя
+ */
+export interface ContextSettings {
+  maxMessages: number; // Максимальное количество сообщений в контексте
+  maxTokens: number; // Максимальное количество токенов в контексте
+  enabled: boolean; // Включен ли контекст
+  autoCleanup: boolean; // Автоматическая очистка старых сообщений
+}
+
+/**
  * Настройки пользователя
  */
 export interface UserSettings {
   userId: number;
   username?: string;
   responseStyle: ResponseStyle;
+  contextSettings: ContextSettings;
   createdAt: string;
   updatedAt: string;
 }

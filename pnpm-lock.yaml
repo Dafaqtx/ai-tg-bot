@@ -17,6 +17,9 @@ importers:
       telegraf:
         specifier: ^4.15.0
         version: 4.16.3
+      uuid:
+        specifier: ^9.0.0
+        version: 9.0.1
       winston:
         specifier: ^3.17.0
         version: 3.17.0
@@ -36,6 +39,9 @@ importers:
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.4
+      '@types/uuid':
+        specifier: ^9.0.0
+        version: 9.0.8
       '@types/winston':
         specifier: ^2.4.4
         version: 2.4.4
@@ -577,6 +583,9 @@ packages:
 
   '@types/triple-beam@1.3.5':
     resolution: {integrity: sha512-6WaYesThRMCl19iryMYP7/x2OVgCtbIVflDGFpWnb9irXI3UjYE4AzmYuiUKY1AJstGijoY+MgUszMgRxIYTYw==}
+
+  '@types/uuid@9.0.8':
+    resolution: {integrity: sha512-jg+97EGIcY9AGHJJRaaPVgetKDsrTgbRjQ5Msgjh/DQKEFl0DtyRr/VCOyD1T2R1MNeWPK/u7JoGhlDZnKBAfA==}
 
   '@types/winston@2.4.4':
     resolution: {integrity: sha512-BVGCztsypW8EYwJ+Hq+QNYiT/MUyCif0ouBH+flrY66O5W+KIXAMML6E/0fJpm7VjIzgangahl5S03bJJQGrZw==}
@@ -3186,6 +3195,8 @@ snapshots:
   '@types/strip-json-comments@0.0.30': {}
 
   '@types/triple-beam@1.3.5': {}
+
+  '@types/uuid@9.0.8': {}
 
   '@types/winston@2.4.4':
     dependencies:

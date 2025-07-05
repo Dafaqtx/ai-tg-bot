@@ -4,3 +4,4 @@ export * from "./audioService";
 export * from "./imageService";
 export * from "./userSettingsService";
 export * from "./loggerService";
+export * from "./contextService";

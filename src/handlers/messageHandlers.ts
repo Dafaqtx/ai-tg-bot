@@ -4,6 +4,7 @@ import {
   ImageService,
   logger,
   userSettingsService,
+  contextService,
 } from "../services";
 import { BotContext, AudioMessageType, FileInfo } from "../types";
 import { safeReply } from "../utils";
@@ -56,11 +57,34 @@ export class MessageHandlers {
         ? userSettingsService.getUserSettings(userId, username)
         : null;
 
-      // Генерируем ответ с помощью Gemini API с учетом стиля пользователя
+      // Получаем контекст предыдущих сообщений
+      const context =
+        userId && userSettings
+          ? contextService.formatContextForPrompt(
+              userId,
+              userSettings.contextSettings
+            )
+          : "";
+
+      // Добавляем сообщение пользователя в контекст
+      if (userId && userSettings?.contextSettings.enabled) {
+        contextService.addUserMessage(userId, messageText, "text");
+      }
+
+      // Генерируем ответ с помощью Gemini API с учетом стиля пользователя и контекста
       const response = await this.geminiService.generateTextResponse(
         messageText,
-        userSettings?.responseStyle
+        userSettings?.responseStyle,
+        context
       );
+
+      // Добавляем ответ бота в контекст
+      if (userId && userSettings?.contextSettings.enabled) {
+        contextService.addAssistantMessage(userId, response);
+
+        // Выполняем автоочистку контекста если необходимо
+        contextService.autoCleanupContext(userId, userSettings.contextSettings);
+      }
 
       // Отправляем ответ пользователю
       await safeReply(ctx, response, {
