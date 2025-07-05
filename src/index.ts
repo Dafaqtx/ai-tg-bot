@@ -8,7 +8,7 @@ import {
   unknownCommandHandler,
   MessageHandlers,
 } from "./handlers";
-import { GeminiService } from "./services";
+import { GeminiService, logger } from "./services";
 import { BotContext } from "./types";
 
 /**
@@ -45,7 +45,7 @@ class TelegramBot {
       try {
         await handler(ctx);
       } catch (error) {
-        console.error("Ошибка при обработке сообщения:", error);
+        logger.error("Ошибка при обработке сообщения", error);
         void ctx.reply(
           "Произошла ошибка при обработке вашего сообщения. Пожалуйста, попробуйте позже."
         );
@@ -112,7 +112,7 @@ class TelegramBot {
 
     // Обработка глобальных ошибок Telegraf
     this.bot.catch((err: unknown, ctx: BotContext) => {
-      console.error("Ошибка Telegraf:", err);
+      logger.error("Ошибка Telegraf", err);
       void ctx.reply(
         "Произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже."
       );
@@ -124,11 +124,12 @@ class TelegramBot {
    */
   async start(): Promise<void> {
     try {
-      console.log("Бот успешно запущен! 🚀");
-      console.log("Нажмите Ctrl+C для остановки");
+      logger.info("Бот успешно запущен! 🚀");
+      logger.info("Нажмите Ctrl+C для остановки");
+      logger.logSystemEvent("bot_started");
       await this.bot.launch();
     } catch (error) {
-      console.error("Ошибка при запуске бота:", error);
+      logger.error("Ошибка при запуске бота", error);
       process.exit(1);
     }
   }
@@ -137,6 +138,8 @@ class TelegramBot {
    * Остановка бота
    */
   stop(reason?: string): void {
+    logger.info(`Остановка бота. Причина: ${reason || "не указана"}`);
+    logger.logSystemEvent("bot_stopped", { reason });
     this.bot.stop(reason);
   }
 }

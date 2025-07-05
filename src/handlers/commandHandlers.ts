@@ -1,4 +1,5 @@
 import { BotContext } from "../types";
+import { logger } from "../services";
 
 /**
  * Обработчик команды /start
@@ -6,6 +7,16 @@ import { BotContext } from "../types";
  */
 export const startHandler = (ctx: BotContext): void => {
   const userName = ctx.from?.first_name || "пользователь";
+  const userId = ctx.from?.id;
+  const username = ctx.from?.username;
+
+  // Логируем использование команды /start
+  if (userId) {
+    logger.logUserActivity(userId, username, "start_command", {
+      firstName: ctx.from?.first_name,
+      chatType: ctx.chat?.type,
+    });
+  }
 
   const welcomeMessage = `Привет, ${userName}! 👋
 
@@ -26,6 +37,16 @@ export const startHandler = (ctx: BotContext): void => {
  * Показывает подробную информацию о возможностях бота
  */
 export const helpHandler = (ctx: BotContext): void => {
+  const userId = ctx.from?.id;
+  const username = ctx.from?.username;
+
+  // Логируем использование команды /help
+  if (userId) {
+    logger.logUserActivity(userId, username, "help_command", {
+      chatType: ctx.chat?.type,
+    });
+  }
+
   const helpMessage = `🤖 **Что умеет этот бот:**
 
 📝 **Команды:**
@@ -63,6 +84,24 @@ export const helpHandler = (ctx: BotContext): void => {
  * Информирует пользователя о том, что команда не распознана
  */
 export const unknownCommandHandler = (ctx: BotContext): void => {
+  const userId = ctx.from?.id;
+  const username = ctx.from?.username;
+  const command =
+    ctx.message && "text" in ctx.message ? ctx.message.text : "unknown";
+
+  // Логируем использование неизвестной команды
+  if (userId) {
+    logger.logUserActivity(userId, username, "unknown_command", {
+      command,
+      chatType: ctx.chat?.type,
+    });
+  }
+
+  logger.warn("Получена неизвестная команда", {
+    userId,
+    command,
+  });
+
   void ctx.reply(
     "Я не понимаю эту команду. Используйте /help для получения списка доступных команд."
   );

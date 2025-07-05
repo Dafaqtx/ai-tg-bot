@@ -1,4 +1,4 @@
-import { GeminiService, AudioService, ImageService } from "../services";
+import { GeminiService, AudioService, ImageService, logger } from "../services";
 import { BotContext, AudioMessageType, FileInfo } from "../types";
 
 /**
@@ -25,10 +25,20 @@ export class MessageHandlers {
       }
 
       const messageText = ctx.message.text;
+      const userId = ctx.from?.id;
+      const username = ctx.from?.username;
 
       // Если это команда, игнорируем (обрабатывается отдельно)
       if (messageText.startsWith("/")) {
         return;
+      }
+
+      // Логируем активность пользователя
+      if (userId) {
+        logger.logUserActivity(userId, username, "text_message", {
+          messageLength: messageText.length,
+          chatType: ctx.chat?.type,
+        });
       }
 
       // Отправляем индикатор набора текста
@@ -43,8 +53,13 @@ export class MessageHandlers {
       void ctx.reply(response, {
         parse_mode: "Markdown",
       });
+
+      logger.debug("Текстовое сообщение обработано успешно", {
+        userId,
+        responseLength: response.length,
+      });
     } catch (error) {
-      console.error("Ошибка при обработке текстового сообщения:", error);
+      logger.error("Ошибка при обработке текстового сообщения", error);
       void ctx.reply(
         "Произошла ошибка при обработке вашего сообщения. Пожалуйста, попробуйте позже."
       );
@@ -62,6 +77,16 @@ export class MessageHandlers {
         return;
       }
 
+      const userId = ctx.from?.id;
+      const username = ctx.from?.username;
+
+      // Логируем активность пользователя
+      if (userId) {
+        logger.logUserActivity(userId, username, "image_message", {
+          chatType: ctx.chat?.type,
+        });
+      }
+
       // Отправляем индикатор загрузки фото
       await ctx.sendChatAction("upload_photo");
 
@@ -69,7 +94,11 @@ export class MessageHandlers {
       const photo = ctx.message.photo[ctx.message.photo.length - 1];
       const fileId = photo.file_id;
 
-      console.log("Получено изображение для анализа");
+      logger.info("Получено изображение для анализа", {
+        userId,
+        fileId,
+        photoSize: `${photo.width}x${photo.height}`,
+      });
 
       // Получаем URL для скачивания файла
       const fileUrl = await ctx.telegram.getFileLink(fileId);
@@ -87,8 +116,13 @@ export class MessageHandlers {
       void ctx.reply(result.message, {
         parse_mode: "Markdown",
       });
+
+      logger.debug("Изображение обработано успешно", {
+        userId,
+        success: result.success,
+      });
     } catch (error) {
-      console.error("Ошибка при обработке изображения:", error);
+      logger.error("Ошибка при обработке изображения", error);
       void ctx.reply(
         "Произошла ошибка при обработке вашего изображения. Пожалуйста, попробуйте позже."
       );
@@ -125,10 +159,29 @@ export class MessageHandlers {
         ? fileInfo.file_name
         : undefined;
 
-      console.log(
+      const userId = ctx.from?.id;
+      const username = ctx.from?.username;
+
+      // Логируем активность пользователя
+      if (userId) {
+        logger.logUserActivity(userId, username, "audio_message", {
+          messageType,
+          duration,
+          fileName,
+          chatType: ctx.chat?.type,
+        });
+      }
+
+      logger.info(
         `Получено ${
           isVoice ? "голосовое сообщение" : "аудиофайл"
-        } длительностью ${duration || "неизвестно"} сек`
+        } длительностью ${duration || "неизвестно"} сек`,
+        {
+          userId,
+          fileId,
+          messageType,
+          duration,
+        }
       );
 
       // Получаем URL для скачивания файла
@@ -150,8 +203,14 @@ export class MessageHandlers {
 
       // Отправляем ответ пользователю
       void ctx.reply(result.message);
+
+      logger.debug("Аудиосообщение обработано успешно", {
+        userId,
+        success: result.success,
+        messageType,
+      });
     } catch (error) {
-      console.error("Ошибка при обработке аудиосообщения:", error);
+      logger.error("Ошибка при обработке аудиосообщения", error);
       void ctx.reply(
         "Произошла ошибка при обработке вашего аудиосообщения. Пожалуйста, попробуйте позже."
       );
@@ -162,6 +221,21 @@ export class MessageHandlers {
    * Обработчик неподдерживаемых типов сообщений
    */
   async handleUnsupportedMessage(ctx: BotContext): Promise<void> {
+    const userId = ctx.from?.id;
+    const username = ctx.from?.username;
+
+    // Логируем попытку отправить неподдерживаемый тип сообщения
+    if (userId) {
+      logger.logUserActivity(userId, username, "unsupported_message", {
+        chatType: ctx.chat?.type,
+      });
+    }
+
+    logger.warn("Получено неподдерживаемое сообщение", {
+      userId,
+      messageType: ctx.message ? Object.keys(ctx.message)[0] : "unknown",
+    });
+
     void ctx.reply(
       "Я могу обрабатывать только текстовые сообщения, изображения и аудио."
     );

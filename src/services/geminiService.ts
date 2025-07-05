@@ -7,6 +7,8 @@ import {
 
 import { promptConfig } from "../config";
 
+import { logger } from "./loggerService";
+
 /**
  * Сервис для работы с Gemini API
  */
@@ -25,18 +27,36 @@ export class GeminiService {
    * @returns Promise<string> - ответ от Gemini
    */
   async generateTextResponse(prompt: string): Promise<string> {
+    const startTime = Date.now();
+
     try {
       // Объединяем базовый промт с запросом пользователя
       const fullPrompt = `${promptConfig.basePrompt}\n\nЗапрос пользователя: ${prompt}`;
+
+      logger.debug("Отправка запроса к Gemini API", {
+        promptLength: fullPrompt.length,
+        model: "gemini-2.5-flash",
+      });
 
       const result = await this.model.generateContent({
         model: "gemini-2.5-flash",
         contents: fullPrompt,
       });
 
+      const duration = Date.now() - startTime;
+      logger.logApiCall("Gemini", "generateTextResponse", duration, true);
+
       return result.text || "Извините, не удалось сгенерировать ответ.";
     } catch (error) {
-      console.error("Ошибка при генерации текстового ответа:", error);
+      const duration = Date.now() - startTime;
+      logger.logApiCall(
+        "Gemini",
+        "generateTextResponse",
+        duration,
+        false,
+        error as Error
+      );
+      logger.error("Ошибка при генерации текстового ответа", error);
       return this.handleError(error);
     }
   }
@@ -51,7 +71,14 @@ export class GeminiService {
     filePath: string,
     mimeType: string
   ): Promise<{ uri: string; mimeType: string }> {
+    const startTime = Date.now();
+
     try {
+      logger.debug("Загрузка файла в Gemini API", {
+        filePath,
+        mimeType,
+      });
+
       const myfile = await this.genAI.files.upload({
         file: filePath,
         config: { mimeType },
@@ -61,12 +88,23 @@ export class GeminiService {
         throw new Error("Не удалось загрузить файл в Gemini API");
       }
 
+      const duration = Date.now() - startTime;
+      logger.logApiCall("Gemini", "uploadFile", duration, true);
+
       return {
         uri: myfile.uri,
         mimeType: myfile.mimeType,
       };
     } catch (error) {
-      console.error("Ошибка при загрузке файла в Gemini API:", error);
+      const duration = Date.now() - startTime;
+      logger.logApiCall(
+        "Gemini",
+        "uploadFile",
+        duration,
+        false,
+        error as Error
+      );
+      logger.error("Ошибка при загрузке файла в Gemini API", error);
       throw error;
     }
   }
@@ -83,7 +121,15 @@ export class GeminiService {
     fileMimeType: string,
     prompt: string
   ): Promise<string> {
+    const startTime = Date.now();
+
     try {
+      logger.debug("Генерация ответа на медиафайл", {
+        fileUri,
+        fileMimeType,
+        promptLength: prompt.length,
+      });
+
       const result = await this.model.generateContent({
         model: "gemini-2.5-flash",
         contents: createUserContent([
@@ -95,12 +141,24 @@ export class GeminiService {
       const responseText = result.text;
 
       if (!responseText) {
+        logger.warn("Gemini вернул пустой ответ на медиафайл");
         return "Извините, не удалось обработать медиафайл. Попробуйте еще раз.";
       }
 
+      const duration = Date.now() - startTime;
+      logger.logApiCall("Gemini", "generateMediaResponse", duration, true);
+
       return responseText;
     } catch (error) {
-      console.error("Ошибка при генерации ответа на медиафайл:", error);
+      const duration = Date.now() - startTime;
+      logger.logApiCall(
+        "Gemini",
+        "generateMediaResponse",
+        duration,
+        false,
+        error as Error
+      );
+      logger.error("Ошибка при генерации ответа на медиафайл", error);
       return this.handleError(error);
     }
   }

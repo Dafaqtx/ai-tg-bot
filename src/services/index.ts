@@ -2,3 +2,4 @@
 export * from "./geminiService";
 export * from "./audioService";
 export * from "./imageService";
+export * from "./loggerService";
