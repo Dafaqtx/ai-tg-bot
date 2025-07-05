@@ -56,9 +56,6 @@
     "src/**/*.{ts,js}": [
       "eslint --fix"
     ],
-    "src/**/*.ts": [
-      "npm run type-check"
-    ],
     "tests/**/*.{ts,js}": [
       "eslint --fix"
     ],

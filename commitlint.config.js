@@ -8,6 +8,8 @@ module.exports = {
 
   // Кастомные правила для проекта
   rules: {
+    // Проверка что subject содержит только английские символы
+    "subject-english-only": [2, "always"],
     // Тип коммита (обязательно)
     "type-enum": [
       2,
@@ -60,6 +62,10 @@ module.exports = {
     // Заголовок должен быть в нижнем регистре
     "subject-case": [2, "always", "lower-case"],
 
+    // Заголовок должен быть только на английском языке
+    "subject-max-length": [2, "always", 50],
+    "subject-min-length": [2, "always", 10],
+
     // Тело коммита должно начинаться с пустой строки
     "body-leading-blank": [2, "always"],
 
@@ -82,4 +88,25 @@ module.exports = {
   // Помощь для пользователей
   helpUrl:
     "https://github.com/conventional-changelog/commitlint/#what-is-commitlint",
+
+  // Кастомные плагины
+  plugins: [
+    {
+      rules: {
+        "subject-english-only": (parsed) => {
+          const { subject } = parsed;
+          if (!subject) return [true];
+
+          // Проверяем что subject содержит только английские символы, цифры и разрешенные знаки
+          const englishOnlyRegex = /^[a-zA-Z0-9\s\-_.,!?()[\]{}:;'"\/\\]+$/;
+          const isEnglishOnly = englishOnlyRegex.test(subject);
+
+          return [
+            isEnglishOnly,
+            isEnglishOnly ? "" : "Subject must contain only English characters",
+          ];
+        },
+      },
+    },
+  ],
 };

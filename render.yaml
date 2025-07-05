@@ -1,0 +1,25 @@
+services:
+  # Telegram бот сервис
+  - type: web
+    name: ai-tg-bot
+    env: docker
+    dockerfilePath: ./Dockerfile
+    # Для бота можем использовать минимальный план
+    plan: starter
+    # Переменные окружения (настроить в панели Render)
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BOT_TOKEN
+        sync: false # Устанавливается вручную в панели
+      - key: GEMINI_API_KEY
+        sync: false # Устанавливается вручную в панели
+      - key: LOG_LEVEL
+        value: info
+    # Автоматический деплой при пуше в main
+    autoDeploy: true
+    # Настройки сборки
+    buildCommand: pnpm install && pnpm run build
+    startCommand: pnpm start
+    # Проверка здоровья сервиса
+    healthCheckPath: /health

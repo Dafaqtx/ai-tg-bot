@@ -14,6 +14,7 @@ import {
 } from "./handlers";
 import { GeminiService, logger } from "./services";
 import { BotContext } from "./types";
+import { HttpServer } from "./server";
 
 /**
  * Основной класс Telegram бота
@@ -22,6 +23,7 @@ class TelegramBot {
   private bot: Telegraf<BotContext>;
   private geminiService: GeminiService;
   private messageHandlers: MessageHandlers;
+  private httpServer: HttpServer;
 
   constructor() {
     // Получаем конфигурацию
@@ -33,6 +35,10 @@ class TelegramBot {
     // Инициализируем сервисы
     this.geminiService = new GeminiService(config.geminiApiKey);
     this.messageHandlers = new MessageHandlers(this.geminiService);
+
+    // Инициализируем HTTP сервер для health check
+    const port = Number(process.env.PORT) || 3000;
+    this.httpServer = new HttpServer(port);
 
     // Настраиваем обработчики
     this.setupHandlers();
@@ -134,6 +140,9 @@ class TelegramBot {
    */
   async start(): Promise<void> {
     try {
+      // Запускаем HTTP сервер для health check
+      await this.httpServer.start();
+
       logger.info("Бот успешно запущен! 🚀");
       logger.info("Нажмите Ctrl+C для остановки");
       logger.logSystemEvent("bot_started");
@@ -147,9 +156,14 @@ class TelegramBot {
   /**
    * Остановка бота
    */
-  stop(reason?: string): void {
+  async stop(reason?: string): Promise<void> {
     logger.info(`Остановка бота. Причина: ${reason || "не указана"}`);
     logger.logSystemEvent("bot_stopped", { reason });
+
+    // Останавливаем HTTP сервер
+    await this.httpServer.stop();
+
+    // Останавливаем бота
     this.bot.stop(reason);
   }
 }
@@ -161,5 +175,9 @@ const telegramBot = new TelegramBot();
 telegramBot.start();
 
 // Корректное завершение работы при получении сигналов остановки
-process.once("SIGINT", (): void => telegramBot.stop("SIGINT"));
-process.once("SIGTERM", (): void => telegramBot.stop("SIGTERM"));
+process.once("SIGINT", (): void => {
+  void telegramBot.stop("SIGINT");
+});
+process.once("SIGTERM", (): void => {
+  void telegramBot.stop("SIGTERM");
+});
