@@ -129,6 +129,29 @@ describe("UserSettingsService", () => {
 
       expect(updatedSettings.username).toBe(newUsername);
     });
+
+    it("должен работать с новыми стилями", () => {
+      const userId = 67890;
+      const username = "developer";
+
+      // Тестируем новые стили
+      const styles: ResponseStyle[] = [
+        "educational",
+        "motivational",
+        "developer",
+        "humorous",
+        "calm",
+      ];
+
+      styles.forEach((style) => {
+        const settings = userSettingsService.updateUserStyle(
+          userId,
+          style,
+          username
+        );
+        expect(settings.responseStyle).toBe(style);
+      });
+    });
   });
 
   describe("Style descriptions", () => {
@@ -154,17 +177,25 @@ describe("UserSettingsService", () => {
       const styles = userSettingsService.getAllStyles();
 
       expect(styles).toEqual(STYLE_DESCRIPTIONS);
-      expect(styles).toHaveLength(5);
+      expect(styles).toHaveLength(10); // Обновлено для 10 стилей
     });
   });
 
   describe("Style validation", () => {
     it("должен валидировать правильные стили", () => {
+      // Оригинальные стили
       expect(userSettingsService.isValidStyle("friendly")).toBe(true);
       expect(userSettingsService.isValidStyle("expert")).toBe(true);
       expect(userSettingsService.isValidStyle("detailed")).toBe(true);
       expect(userSettingsService.isValidStyle("concise")).toBe(true);
       expect(userSettingsService.isValidStyle("medical")).toBe(true);
+
+      // Новые стили
+      expect(userSettingsService.isValidStyle("educational")).toBe(true);
+      expect(userSettingsService.isValidStyle("motivational")).toBe(true);
+      expect(userSettingsService.isValidStyle("developer")).toBe(true);
+      expect(userSettingsService.isValidStyle("humorous")).toBe(true);
+      expect(userSettingsService.isValidStyle("calm")).toBe(true);
     });
 
     it("должен отклонять неправильные стили", () => {
@@ -192,6 +223,11 @@ describe("UserSettingsService", () => {
         detailed: 1,
         concise: 0,
         medical: 0,
+        educational: 0,
+        motivational: 0,
+        developer: 0,
+        humorous: 0,
+        calm: 0,
       });
     });
 
