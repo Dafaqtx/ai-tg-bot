@@ -1,19 +1,27 @@
 {
   "name": "ai-tg-bot",
   "version": "1.0.0",
-  "description": "Telegram bot using Telegraf",
+  "description": "Modular Telegram bot with Gemini AI integration",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node-dev --respawn src/index.ts",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev:watch": "ts-node-dev --respawn --transpile-only --watch src src/index.ts",
+    "clean": "rm -rf dist",
+    "build:clean": "npm run clean && npm run build",
     "lint": "eslint --ext .ts src/",
-    "lint:fix": "eslint --ext .ts src/ --fix"
+    "lint:fix": "eslint --ext .ts src/ --fix",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "telegram",
     "bot",
-    "telegraf"
+    "telegraf",
+    "gemini",
+    "ai",
+    "typescript",
+    "modular"
   ],
   "author": "",
   "license": "ISC",
