@@ -1,6 +1,7 @@
 import {
   hasMarkdownIssues,
   escapeMarkdown,
+  splitLongMessage,
 } from "../../src/utils/telegramUtils";
 
 describe("TelegramUtils", () => {
@@ -75,6 +76,74 @@ describe("TelegramUtils", () => {
 
     it("должен обрабатывать пустую строку", () => {
       expect(escapeMarkdown("")).toBe("");
+    });
+  });
+
+  describe("splitLongMessage", () => {
+    it("должен возвращать одну часть для короткого сообщения", () => {
+      const shortMessage = "Короткое сообщение";
+      const result = splitLongMessage(shortMessage, 100);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(shortMessage);
+    });
+
+    it("должен разделять длинное сообщение на части", () => {
+      const longMessage = "a".repeat(5000); // Создаем длинное сообщение
+      const result = splitLongMessage(longMessage, 1000);
+      expect(result.length).toBeGreaterThan(1);
+
+      // Проверяем, что каждая часть не превышает лимит
+      result.forEach((part) => {
+        expect(part.length).toBeLessThanOrEqual(1000);
+      });
+
+      // Проверяем, что все части вместе дают исходное сообщение
+      const combined = result.join("");
+      expect(combined).toBe(longMessage);
+    });
+
+    it("должен разделять по абзацам когда возможно", () => {
+      const message = "Первый абзац.\n\nВторой абзац.\n\nТретий абзац.";
+      const result = splitLongMessage(message, 20);
+
+      // Должен разделиться по двойным переносам строк
+      expect(result.length).toBeGreaterThan(1);
+      expect(result[0]).toContain("Первый абзац.");
+    });
+
+    it("должен разделять по предложениям когда нет абзацев", () => {
+      const message =
+        "Первое предложение. Второе предложение. Третье предложение.";
+      const result = splitLongMessage(message, 25);
+
+      expect(result.length).toBeGreaterThan(1);
+      expect(result[0]).toContain("Первое предложение.");
+    });
+
+    it("должен разделять по пробелам в крайнем случае", () => {
+      const message = "слово1 слово2 слово3 слово4 слово5 слово6";
+      const result = splitLongMessage(message, 15);
+
+      expect(result.length).toBeGreaterThan(1);
+      // Не должен разрезать посередине слов
+      result.forEach((part) => {
+        if (part.trim().includes(" ")) {
+          expect(part.trim()).not.toMatch(/^\S*$/); // Не должно быть обрезанных слов
+        }
+      });
+    });
+
+    it("должен обрабатывать пустую строку", () => {
+      const result = splitLongMessage("", 100);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe("");
+    });
+
+    it("должен использовать значение по умолчанию для maxLength", () => {
+      const shortMessage = "Тест";
+      const result = splitLongMessage(shortMessage);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(shortMessage);
     });
   });
 });
