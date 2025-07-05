@@ -6,6 +6,9 @@ import {
   startHandler,
   helpHandler,
   unknownCommandHandler,
+  styleHandler,
+  stylesHandler,
+  setStyleHandler,
   MessageHandlers,
 } from "./handlers";
 import { GeminiService, logger } from "./services";
@@ -61,6 +64,9 @@ class TelegramBot {
     // Обработчики команд
     this.bot.start(startHandler);
     this.bot.help(helpHandler);
+    this.bot.command("style", styleHandler);
+    this.bot.command("styles", stylesHandler);
+    this.bot.command("setstyle", setStyleHandler);
 
     // Обработчик текстовых сообщений (исключая команды)
     this.bot.on(

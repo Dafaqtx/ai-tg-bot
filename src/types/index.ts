@@ -37,3 +37,34 @@ export type AudioFormat = "mp3" | "wav" | "m4a" | "aac" | "ogg" | "flac";
 
 // Типы поддерживаемых изображений
 export type ImageFormat = "jpg" | "jpeg" | "png" | "webp" | "heic" | "heif";
+
+/**
+ * Доступные стили ответов бота
+ */
+export type ResponseStyle =
+  | "detailed"
+  | "concise"
+  | "friendly"
+  | "expert"
+  | "medical";
+
+/**
+ * Настройки пользователя
+ */
+export interface UserSettings {
+  userId: number;
+  username?: string;
+  responseStyle: ResponseStyle;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Описание стиля ответа для пользователя
+ */
+export interface StyleDescription {
+  key: ResponseStyle;
+  name: string;
+  description: string;
+  emoji: string;
+}

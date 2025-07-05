@@ -1,5 +1,5 @@
-import { logger } from "../services";
-import { BotContext } from "../types";
+import { logger, userSettingsService } from "../services";
+import { BotContext, ResponseStyle } from "../types";
 import { safeReply } from "../utils";
 
 /**
@@ -53,9 +53,17 @@ export const helpHandler = async (ctx: BotContext): Promise<void> => {
 📝 **Команды:**
 /start - Начать взаимодействие с ботом
 /help - Показать список доступных команд
+/style - Посмотреть текущий стиль ответов
+/styles - Показать все доступные стили
+/setstyle [название] - Изменить стиль ответов
+
+🎨 **Персонализация:**
+• **5 стилей ответов** - краткий, дружелюбный, подробный, экспертный, медицинский
+• **Персональные настройки** - каждый пользователь может выбрать свой стиль
+• **Автосохранение** - ваши настройки запоминаются
 
 💬 **Обработка сообщений:**
-• **Текстовые сообщения** - отвечаю с помощью ИИ
+• **Текстовые сообщения** - отвечаю с помощью ИИ в вашем стиле
 • **Изображения** - анализирую и описываю содержимое
 • **Голосовые сообщения** - транскрибирую и отвечаю
 • **Аудиофайлы** - анализирую содержание (речь, музыка, подкасты)
@@ -72,7 +80,7 @@ export const helpHandler = async (ctx: BotContext): Promise<void> => {
 • Аудиофайлы - определяю тип и описываю содержание
 • Поддерживаю форматы: MP3, WAV, M4A, AAC, OGG, FLAC
 
-Просто отправьте сообщение и я обработаю его! 🚀`;
+Просто отправьте сообщение и я обработаю его в вашем стиле! 🚀`;
 
   // Используем безопасную отправку сообщения
   await safeReply(ctx, helpMessage, {
@@ -106,4 +114,158 @@ export const unknownCommandHandler = (ctx: BotContext): void => {
   void ctx.reply(
     "Я не понимаю эту команду. Используйте /help для получения списка доступных команд."
   );
+};
+
+/**
+ * Обработчик команды /style
+ * Показывает текущий стиль и предлагает его изменить
+ */
+export const styleHandler = async (ctx: BotContext): Promise<void> => {
+  const userId = ctx.from?.id;
+  const username = ctx.from?.username;
+
+  if (!userId) {
+    await safeReply(ctx, "Не удалось определить пользователя.");
+    return;
+  }
+
+  // Логируем использование команды /style
+  logger.logUserActivity(userId, username, "style_command", {
+    chatType: ctx.chat?.type,
+  });
+
+  try {
+    // Получаем текущие настройки пользователя
+    const userSettings = userSettingsService.getUserSettings(userId, username);
+    const currentStyle = userSettingsService.getStyleDescription(
+      userSettings.responseStyle
+    );
+
+    const message = `🎨 **Ваш текущий стиль ответов:**
+
+${currentStyle?.emoji} **${currentStyle?.name}**
+${currentStyle?.description}
+
+Используйте /styles чтобы посмотреть все доступные стили и изменить настройки.`;
+
+    await safeReply(ctx, message, { parse_mode: "Markdown" });
+  } catch (error) {
+    logger.error("Ошибка при получении стиля пользователя", error);
+    await safeReply(ctx, "Произошла ошибка при получении ваших настроек.");
+  }
+};
+
+/**
+ * Обработчик команды /styles
+ * Показывает все доступные стили с кнопками для выбора
+ */
+export const stylesHandler = async (ctx: BotContext): Promise<void> => {
+  const userId = ctx.from?.id;
+  const username = ctx.from?.username;
+
+  if (!userId) {
+    await safeReply(ctx, "Не удалось определить пользователя.");
+    return;
+  }
+
+  // Логируем использование команды /styles
+  logger.logUserActivity(userId, username, "styles_command", {
+    chatType: ctx.chat?.type,
+  });
+
+  try {
+    // Получаем все доступные стили
+    const allStyles = userSettingsService.getAllStyles();
+    const userSettings = userSettingsService.getUserSettings(userId, username);
+
+    // Создаем описание всех стилей
+    let message = "🎨 **Выберите стиль ответов:**\n\n";
+
+    allStyles.forEach((style) => {
+      const isActive = style.key === userSettings.responseStyle;
+      const activeMarker = isActive ? "✅ " : "";
+      message += `${activeMarker}${style.emoji} **${style.name}**\n`;
+      message += `${style.description}\n\n`;
+    });
+
+    message += `Ваш текущий стиль: ${userSettings.responseStyle}\n\n`;
+    message += "Чтобы изменить стиль, используйте команду:\n";
+    message += "`/setstyle [название]`\n\n";
+    message += "Например: `/setstyle friendly`";
+
+    await safeReply(ctx, message, { parse_mode: "Markdown" });
+  } catch (error) {
+    logger.error("Ошибка при показе стилей", error);
+    await safeReply(ctx, "Произошла ошибка при загрузке стилей.");
+  }
+};
+
+/**
+ * Обработчик команды /setstyle [style]
+ * Устанавливает новый стиль ответов
+ */
+export const setStyleHandler = async (ctx: BotContext): Promise<void> => {
+  const userId = ctx.from?.id;
+  const username = ctx.from?.username;
+
+  if (!userId) {
+    await safeReply(ctx, "Не удалось определить пользователя.");
+    return;
+  }
+
+  // Получаем аргумент команды
+  const messageText =
+    ctx.message && "text" in ctx.message ? ctx.message.text : "";
+  const args = messageText.split(" ");
+
+  if (args.length < 2) {
+    await safeReply(
+      ctx,
+      "Укажите стиль ответов. Например: `/setstyle friendly`\n\nИспользуйте /styles чтобы посмотреть все доступные стили.",
+      { parse_mode: "Markdown" }
+    );
+    return;
+  }
+
+  const newStyleKey = args[1].toLowerCase();
+
+  // Логируем попытку смены стиля
+  logger.logUserActivity(userId, username, "setstyle_command", {
+    requestedStyle: newStyleKey,
+    chatType: ctx.chat?.type,
+  });
+
+  try {
+    // Проверяем, что стиль валидный
+    if (!userSettingsService.isValidStyle(newStyleKey)) {
+      await safeReply(
+        ctx,
+        `❌ Неизвестный стиль "${newStyleKey}". Используйте /styles чтобы посмотреть доступные стили.`
+      );
+      return;
+    }
+
+    // Обновляем стиль пользователя
+    const updatedSettings = userSettingsService.updateUserStyle(
+      userId,
+      newStyleKey as ResponseStyle,
+      username
+    );
+
+    const styleDescription = userSettingsService.getStyleDescription(
+      updatedSettings.responseStyle
+    );
+
+    const message = `✅ **Стиль ответов изменен!**
+
+${styleDescription?.emoji} **${styleDescription?.name}**
+${styleDescription?.description}
+
+Теперь я буду отвечать в этом стиле. Попробуйте задать мне любой вопрос!`;
+
+    await safeReply(ctx, message, { parse_mode: "Markdown" });
+  } catch (error) {
+    logger.error("Ошибка при установке стиля", error);
+    await safeReply(ctx, "Произошла ошибка при изменении стиля.");
+  }
 };

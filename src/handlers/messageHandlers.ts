@@ -1,4 +1,10 @@
-import { GeminiService, AudioService, ImageService, logger } from "../services";
+import {
+  GeminiService,
+  AudioService,
+  ImageService,
+  logger,
+  userSettingsService,
+} from "../services";
 import { BotContext, AudioMessageType, FileInfo } from "../types";
 import { safeReply } from "../utils";
 
@@ -45,9 +51,15 @@ export class MessageHandlers {
       // Отправляем индикатор набора текста
       await ctx.sendChatAction("typing");
 
-      // Генерируем ответ с помощью Gemini API
+      // Получаем настройки пользователя для персонализированного ответа
+      const userSettings = userId
+        ? userSettingsService.getUserSettings(userId, username)
+        : null;
+
+      // Генерируем ответ с помощью Gemini API с учетом стиля пользователя
       const response = await this.geminiService.generateTextResponse(
-        messageText
+        messageText,
+        userSettings?.responseStyle
       );
 
       // Отправляем ответ пользователю

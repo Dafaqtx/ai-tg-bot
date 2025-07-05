@@ -5,8 +5,8 @@ import {
   Models,
 } from "@google/genai";
 
-import { promptConfig } from "../config";
-
+import { promptConfig, basePromptVariants } from "../config";
+import { ResponseStyle } from "../types";
 import { logger } from "./loggerService";
 
 /**
@@ -22,19 +22,29 @@ export class GeminiService {
   }
 
   /**
-   * Генерирует текстовый ответ на основе промта
+   * Генерирует текстовый ответ на основе промта с учетом стиля пользователя
    * @param prompt - текст запроса пользователя
+   * @param responseStyle - стиль ответа пользователя (опционально)
    * @returns Promise<string> - ответ от Gemini
    */
-  async generateTextResponse(prompt: string): Promise<string> {
+  async generateTextResponse(
+    prompt: string,
+    responseStyle?: ResponseStyle
+  ): Promise<string> {
     const startTime = Date.now();
 
     try {
+      // Выбираем промт в зависимости от стиля пользователя
+      const basePrompt = responseStyle
+        ? basePromptVariants[responseStyle]
+        : promptConfig.basePrompt;
+
       // Объединяем базовый промт с запросом пользователя
-      const fullPrompt = `${promptConfig.basePrompt}\n\nЗапрос пользователя: ${prompt}`;
+      const fullPrompt = `${basePrompt}\n\nЗапрос пользователя: ${prompt}`;
 
       logger.debug("Отправка запроса к Gemini API", {
         promptLength: fullPrompt.length,
+        responseStyle: responseStyle || "default",
         model: "gemini-2.5-flash",
       });
 
