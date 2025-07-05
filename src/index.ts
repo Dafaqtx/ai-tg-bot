@@ -9,6 +9,7 @@ import {
   styleHandler,
   stylesHandler,
   setStyleHandler,
+  styleCallbackHandler,
   MessageHandlers,
 } from "./handlers";
 import { GeminiService, logger } from "./services";
@@ -67,6 +68,9 @@ class TelegramBot {
     this.bot.command("style", styleHandler);
     this.bot.command("styles", stylesHandler);
     this.bot.command("setstyle", setStyleHandler);
+
+    // Обработчик callback_query для inline-кнопок
+    this.bot.on("callback_query", styleCallbackHandler);
 
     // Обработчик текстовых сообщений (исключая команды)
     this.bot.on(

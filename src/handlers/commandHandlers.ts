@@ -1,3 +1,5 @@
+import { Markup } from "telegraf";
+
 import { logger, userSettingsService } from "../services";
 import { BotContext, ResponseStyle } from "../types";
 import { safeReply } from "../utils";
@@ -59,6 +61,7 @@ export const helpHandler = async (ctx: BotContext): Promise<void> => {
 
 🎨 **Персонализация:**
 • **5 стилей ответов** - краткий, дружелюбный, подробный, экспертный, медицинский
+• **Удобный выбор** - кнопки в команде /styles или текстовые команды
 • **Персональные настройки** - каждый пользователь может выбрать свой стиль
 • **Автосохранение** - ваши настройки запоминаются
 
@@ -185,15 +188,29 @@ export const stylesHandler = async (ctx: BotContext): Promise<void> => {
       const isActive = style.key === userSettings.responseStyle;
       const activeMarker = isActive ? "✅ " : "";
       message += `${activeMarker}${style.emoji} **${style.name}**\n`;
-      message += `${style.description}\n\n`;
+      message += `${style.description}\n`;
+      message += `Команда: \`/setstyle ${style.key}\`\n\n`;
     });
 
-    message += `Ваш текущий стиль: ${userSettings.responseStyle}\n\n`;
-    message += "Чтобы изменить стиль, используйте команду:\n";
-    message += "`/setstyle [название]`\n\n";
-    message += "Например: `/setstyle friendly`";
+    message += `Ваш текущий стиль: **${userSettings.responseStyle}**\n\n`;
+    message += "💡 **Как изменить:**\n";
+    message += "• Нажмите на кнопку ниже\n";
+    message += "• Или используйте команду из списка выше";
 
-    await safeReply(ctx, message, { parse_mode: "Markdown" });
+    // Создаем inline-кнопки для каждого стиля
+    const keyboard = allStyles.map((style) => {
+      const isActive = style.key === userSettings.responseStyle;
+      const buttonText = isActive
+        ? `✅ ${style.emoji} ${style.name}`
+        : `${style.emoji} ${style.name}`;
+
+      return [Markup.button.callback(buttonText, `setstyle_${style.key}`)];
+    });
+
+    await ctx.reply(message, {
+      parse_mode: "Markdown",
+      reply_markup: Markup.inlineKeyboard(keyboard).reply_markup,
+    });
   } catch (error) {
     logger.error("Ошибка при показе стилей", error);
     await safeReply(ctx, "Произошла ошибка при загрузке стилей.");
@@ -267,5 +284,104 @@ ${styleDescription?.description}
   } catch (error) {
     logger.error("Ошибка при установке стиля", error);
     await safeReply(ctx, "Произошла ошибка при изменении стиля.");
+  }
+};
+
+/**
+ * Обработчик callback_query для inline-кнопок выбора стиля
+ */
+export const styleCallbackHandler = async (ctx: BotContext): Promise<void> => {
+  const callbackData =
+    ctx.callbackQuery && "data" in ctx.callbackQuery
+      ? ctx.callbackQuery.data
+      : "";
+  const userId = ctx.from?.id;
+  const username = ctx.from?.username;
+
+  if (!userId) {
+    await ctx.answerCbQuery("Не удалось определить пользователя.");
+    return;
+  }
+
+  // Проверяем, что это callback для смены стиля
+  if (!callbackData.startsWith("setstyle_")) {
+    await ctx.answerCbQuery("Неизвестная команда.");
+    return;
+  }
+
+  const newStyleKey = callbackData.replace("setstyle_", "");
+
+  // Логируем попытку смены стиля через кнопку
+  logger.logUserActivity(userId, username, "setstyle_callback", {
+    requestedStyle: newStyleKey,
+    chatType: ctx.chat?.type,
+  });
+
+  try {
+    // Проверяем, что стиль валидный
+    if (!userSettingsService.isValidStyle(newStyleKey)) {
+      await ctx.answerCbQuery(`❌ Неизвестный стиль "${newStyleKey}"`);
+      return;
+    }
+
+    // Обновляем стиль пользователя
+    const updatedSettings = userSettingsService.updateUserStyle(
+      userId,
+      newStyleKey as ResponseStyle,
+      username
+    );
+
+    const styleDescription = userSettingsService.getStyleDescription(
+      updatedSettings.responseStyle
+    );
+
+    // Отвечаем на callback
+    await ctx.answerCbQuery(`✅ Стиль изменен на "${styleDescription?.name}"`);
+
+    // Обновляем сообщение с новыми кнопками
+    const allStyles = userSettingsService.getAllStyles();
+
+    let message = "🎨 **Выберите стиль ответов:**\n\n";
+
+    allStyles.forEach((style) => {
+      const isActive = style.key === updatedSettings.responseStyle;
+      const activeMarker = isActive ? "✅ " : "";
+      message += `${activeMarker}${style.emoji} **${style.name}**\n`;
+      message += `${style.description}\n`;
+      message += `Команда: \`/setstyle ${style.key}\`\n\n`;
+    });
+
+    message += `Ваш текущий стиль: **${updatedSettings.responseStyle}**\n\n`;
+    message += "💡 **Как изменить:**\n";
+    message += "• Нажмите на кнопку ниже\n";
+    message += "• Или используйте команду из списка выше";
+
+    // Обновляем кнопки
+    const keyboard = allStyles.map((style) => {
+      const isActive = style.key === updatedSettings.responseStyle;
+      const buttonText = isActive
+        ? `✅ ${style.emoji} ${style.name}`
+        : `${style.emoji} ${style.name}`;
+
+      return [Markup.button.callback(buttonText, `setstyle_${style.key}`)];
+    });
+
+    await ctx.editMessageText(message, {
+      parse_mode: "Markdown",
+      reply_markup: Markup.inlineKeyboard(keyboard).reply_markup,
+    });
+
+    // Отправляем дополнительное сообщение с подтверждением
+    const confirmMessage = `✅ **Стиль ответов изменен!**
+
+${styleDescription?.emoji} **${styleDescription?.name}**
+${styleDescription?.description}
+
+Теперь я буду отвечать в этом стиле. Попробуйте задать мне любой вопрос!`;
+
+    await safeReply(ctx, confirmMessage, { parse_mode: "Markdown" });
+  } catch (error) {
+    logger.error("Ошибка при установке стиля через callback", error);
+    await ctx.answerCbQuery("Произошла ошибка при изменении стиля.");
   }
 };
