@@ -141,7 +141,7 @@ export const promptConfig = {
   // basePromptVariants.friendly - дружелюбный разговорный стиль
   // basePromptVariants.expert - экспертный аналитический подход
   // basePromptVariants.medical - специализированный для медицинских вопросов
-  basePrompt: basePromptVariants.detailed,
+  basePrompt: basePromptVariants.concise,
 
   imagePrompt: `Ты - умный ИИ-ассистент в чате Telegram, который анализирует изображения.
 
