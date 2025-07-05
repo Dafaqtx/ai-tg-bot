@@ -306,7 +306,9 @@ logger.logApiCall("service", "method", duration, success, error);
 
 Подробная документация: [docs/LOGGING.md](docs/LOGGING.md)
 
-## Линтинг
+## Качество кода
+
+### Линтинг
 
 Проект настроен с использованием ESLint для поддержания качества кода:
 
@@ -316,7 +318,49 @@ pnpm lint
 
 # Автоматическое исправление проблем
 pnpm lint:fix
+
+# Проверка типов TypeScript
+pnpm type-check
 ```
+
+### Стандарты коммитов
+
+Проект использует [Conventional Commits](https://www.conventionalcommits.org/) с автоматической проверкой:
+
+```bash
+# Проверить последний коммит
+pnpm run commitlint:check
+
+# Формат коммита
+<type>[scope]: <description>
+
+# Примеры
+feat(telegram): add message splitting for long responses
+fix(services): resolve gemini api timeout errors
+docs: update commit guidelines
+test(utils): add message splitting tests
+```
+
+**Типы коммитов:**
+
+- `feat` - новая функциональность
+- `fix` - исправление багов
+- `docs` - документация
+- `test` - тесты
+- `refactor` - рефакторинг
+- `style` - форматирование
+- `perf` - оптимизация
+- `build` - сборка/зависимости
+- `ci` - CI/CD
+- `chore` - обслуживание
+
+**Области (scope):**
+
+- `core`, `handlers`, `services`, `utils`, `config`
+- `telegram`, `gemini`, `audio`, `image`, `logging`
+- `tests`, `docs`, `deps`, `ci`
+
+Подробнее: [docs/COMMIT_GUIDELINES.md](docs/COMMIT_GUIDELINES.md)
 
 ## Лицензия
 
