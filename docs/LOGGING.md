@@ -112,11 +112,22 @@ logger.logApiCall(
    ```
 
 3. **Активность пользователей**
+
    ```json
    {
      "level": "info",
      "message": "Пользователь testuser выполнил действие: text_message",
      "userId": 123
+   }
+   ```
+
+4. **Ошибки парсинга Markdown**
+   ```json
+   {
+     "level": "warn",
+     "message": "Ошибка парсинга Markdown, отправляем как обычный текст",
+     "originalMessage": "Текст с неправильным *форматированием...",
+     "error": "can't parse entities: Can't find end of the entity..."
    }
    ```
 

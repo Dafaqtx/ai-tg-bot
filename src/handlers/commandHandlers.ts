@@ -1,11 +1,12 @@
-import { BotContext } from "../types";
 import { logger } from "../services";
+import { BotContext } from "../types";
+import { safeReply } from "../utils";
 
 /**
  * Обработчик команды /start
  * Приветствует пользователя и объясняет возможности бота
  */
-export const startHandler = (ctx: BotContext): void => {
+export const startHandler = async (ctx: BotContext): Promise<void> => {
   const userName = ctx.from?.first_name || "пользователь";
   const userId = ctx.from?.id;
   const username = ctx.from?.username;
@@ -20,14 +21,14 @@ export const startHandler = (ctx: BotContext): void => {
 
   const welcomeMessage = `Привет, ${userName}! 👋
 
-Добро пожаловать в наш Telegram бот с интеграцией Gemini API.
+Добро пожаловать в Telegram бот с интеграцией Gemini API.
 
 Просто напишите любой текст, отправьте изображение или аудио, и я отвечу вам с помощью искусственного интеллекта.
 
 Используйте команду /help, чтобы узнать больше о функциях бота.`;
 
-  // Используем void для игнорирования возвращаемого значения
-  void ctx.reply(welcomeMessage, {
+  // Используем безопасную отправку сообщения
+  await safeReply(ctx, welcomeMessage, {
     parse_mode: "Markdown",
   });
 };
@@ -36,7 +37,7 @@ export const startHandler = (ctx: BotContext): void => {
  * Обработчик команды /help
  * Показывает подробную информацию о возможностях бота
  */
-export const helpHandler = (ctx: BotContext): void => {
+export const helpHandler = async (ctx: BotContext): Promise<void> => {
   const userId = ctx.from?.id;
   const username = ctx.from?.username;
 
@@ -73,8 +74,8 @@ export const helpHandler = (ctx: BotContext): void => {
 
 Просто отправьте сообщение и я обработаю его! 🚀`;
 
-  // Используем void для игнорирования возвращаемого значения
-  void ctx.reply(helpMessage, {
+  // Используем безопасную отправку сообщения
+  await safeReply(ctx, helpMessage, {
     parse_mode: "Markdown",
   });
 };

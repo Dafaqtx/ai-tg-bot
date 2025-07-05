@@ -1,5 +1,6 @@
 import { GeminiService, AudioService, ImageService, logger } from "../services";
 import { BotContext, AudioMessageType, FileInfo } from "../types";
+import { safeReply } from "../utils";
 
 /**
  * Класс для обработки различных типов сообщений
@@ -50,7 +51,7 @@ export class MessageHandlers {
       );
 
       // Отправляем ответ пользователю
-      void ctx.reply(response, {
+      await safeReply(ctx, response, {
         parse_mode: "Markdown",
       });
 
@@ -113,7 +114,7 @@ export class MessageHandlers {
       const result = await this.imageService.processImageMessage(fileInfo);
 
       // Отправляем ответ пользователю
-      void ctx.reply(result.message, {
+      await safeReply(ctx, result.message, {
         parse_mode: "Markdown",
       });
 
