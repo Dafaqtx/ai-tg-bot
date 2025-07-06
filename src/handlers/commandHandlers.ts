@@ -1,8 +1,12 @@
 import { Markup } from "telegraf";
 
-import { logger, userSettingsService, contextService } from "../services";
-import { BotContext, ResponseStyle } from "../types";
+import { logger, UserSettingsService, ContextService } from "../services";
+import { BotContext, ResponseStyle, StyleDescription } from "../types";
 import { safeReply } from "../utils";
+
+// Создаем экземпляры сервисов
+const userSettingsService = UserSettingsService.getInstance();
+const contextService = ContextService.getInstance();
 
 /**
  * Обработчик команды /start
@@ -203,7 +207,7 @@ export const stylesHandler = async (ctx: BotContext): Promise<void> => {
     // Создаем описание всех стилей
     let message = "🎨 **Выберите стиль ответов:**\n\n";
 
-    allStyles.forEach((style) => {
+    allStyles.forEach((style: StyleDescription) => {
       const isActive = style.key === userSettings.responseStyle;
       const activeMarker = isActive ? "✅ " : "";
       message += `${activeMarker}${style.emoji} **${style.name}**\n`;
@@ -217,7 +221,7 @@ export const stylesHandler = async (ctx: BotContext): Promise<void> => {
     message += "• Или используйте команду из списка выше";
 
     // Создаем inline-кнопки для каждого стиля
-    const keyboard = allStyles.map((style) => {
+    const keyboard = allStyles.map((style: StyleDescription) => {
       const isActive = style.key === userSettings.responseStyle;
       const buttonText = isActive
         ? `✅ ${style.emoji} ${style.name}`
@@ -362,7 +366,7 @@ export const styleCallbackHandler = async (ctx: BotContext): Promise<void> => {
 
     let message = "🎨 **Выберите стиль ответов:**\n\n";
 
-    allStyles.forEach((style) => {
+    allStyles.forEach((style: StyleDescription) => {
       const isActive = style.key === updatedSettings.responseStyle;
       const activeMarker = isActive ? "✅ " : "";
       message += `${activeMarker}${style.emoji} **${style.name}**\n`;
@@ -376,7 +380,7 @@ export const styleCallbackHandler = async (ctx: BotContext): Promise<void> => {
     message += "• Или используйте команду из списка выше";
 
     // Обновляем кнопки
-    const keyboard = allStyles.map((style) => {
+    const keyboard = allStyles.map((style: StyleDescription) => {
       const isActive = style.key === updatedSettings.responseStyle;
       const buttonText = isActive
         ? `✅ ${style.emoji} ${style.name}`

@@ -14,6 +14,7 @@
     "lint:fix": "eslint --ext .ts src/ --fix",
     "type-check": "tsc --noEmit",
     "test": "jest",
+    "view-db": "ts-node scripts/view-db.ts",
     "prepare": "husky",
     "commitlint": "commitlint --edit",
     "commitlint:check": "commitlint --from HEAD~1 --to HEAD --verbose"

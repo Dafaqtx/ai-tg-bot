@@ -1,12 +1,9 @@
-import fs from "fs";
-
-import path from "path";
-
 import { v4 as uuidv4 } from "uuid";
 
 import { ContextMessage, MessageType, ContextSettings } from "../types";
 
 import { logger } from "./loggerService";
+import { DatabaseService } from "./databaseService";
 
 /**
  * Настройки контекста по умолчанию
@@ -20,18 +17,14 @@ export const DEFAULT_CONTEXT_SETTINGS: ContextSettings = {
 
 /**
  * Сервис для управления контекстом диалогов
- * Сохраняет историю сообщений для каждого пользователя
+ * Использует SQLite базу данных для хранения истории сообщений
  */
 export class ContextService {
   private static instance: ContextService;
-  private contextFile: string;
-  private userContexts: Map<number, ContextMessage[]> = new Map();
+  private db: DatabaseService;
 
   constructor() {
-    // Создаем путь к файлу контекстов
-    this.contextFile = path.join(process.cwd(), "data", "user-contexts.json");
-    this.ensureDataDirectory();
-    this.loadContexts();
+    this.db = DatabaseService.getInstance();
   }
 
   /**
@@ -42,71 +35,6 @@ export class ContextService {
       ContextService.instance = new ContextService();
     }
     return ContextService.instance;
-  }
-
-  /**
-   * Создает директорию data если её нет
-   */
-  private ensureDataDirectory(): void {
-    const dataDir = path.join(process.cwd(), "data");
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-      logger.info("Создана директория для данных контекста", { path: dataDir });
-    }
-  }
-
-  /**
-   * Загружает контексты из файла
-   */
-  private loadContexts(): void {
-    try {
-      if (fs.existsSync(this.contextFile)) {
-        const data = fs.readFileSync(this.contextFile, "utf8");
-        const contexts: Record<string, ContextMessage[]> = JSON.parse(data);
-
-        // Преобразуем объект в Map для быстрого доступа
-        this.userContexts.clear();
-        Object.entries(contexts).forEach(([userId, messages]) => {
-          this.userContexts.set(parseInt(userId), messages);
-        });
-
-        logger.info("Контексты пользователей загружены", {
-          usersCount: Object.keys(contexts).length,
-        });
-      } else {
-        logger.info("Файл контекстов не найден, создаем новый");
-        this.saveContexts();
-      }
-    } catch (error) {
-      logger.error("Ошибка при загрузке контекстов пользователей", error);
-      // В случае ошибки инициализируем пустую Map
-      this.userContexts.clear();
-    }
-  }
-
-  /**
-   * Сохраняет контексты в файл
-   */
-  private saveContexts(): void {
-    try {
-      // Преобразуем Map в объект для сохранения
-      const contexts: Record<string, ContextMessage[]> = {};
-      this.userContexts.forEach((messages, userId) => {
-        contexts[userId.toString()] = messages;
-      });
-
-      fs.writeFileSync(
-        this.contextFile,
-        JSON.stringify(contexts, null, 2),
-        "utf8"
-      );
-
-      logger.debug("Контексты пользователей сохранены", {
-        usersCount: Object.keys(contexts).length,
-      });
-    } catch (error) {
-      logger.error("Ошибка при сохранении контекстов пользователей", error);
-    }
   }
 
   /**
@@ -158,20 +86,44 @@ export class ContextService {
    * Добавляет сообщение в контекст пользователя
    */
   private addMessage(userId: number, message: ContextMessage): void {
-    const messages = this.userContexts.get(userId) || [];
-    messages.push(message);
+    try {
+      const insertStmt = this.db.prepare(`
+        INSERT INTO user_contexts (
+          id, 
+          user_id, 
+          role, 
+          content, 
+          message_type, 
+          token_count,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
 
-    // Сохраняем обновленный контекст
-    this.userContexts.set(userId, messages);
-    this.saveContexts();
+      insertStmt.run(
+        message.id,
+        userId,
+        message.role,
+        message.content,
+        message.messageType,
+        message.tokenCount,
+        message.timestamp
+      );
 
-    logger.debug("Сообщение добавлено в контекст", {
-      userId,
-      role: message.role,
-      messageType: message.messageType,
-      contentLength: message.content.length,
-      tokenCount: message.tokenCount,
-    });
+      logger.debug("Сообщение добавлено в контекст", {
+        userId,
+        role: message.role,
+        messageType: message.messageType,
+        contentLength: message.content.length,
+        tokenCount: message.tokenCount,
+      });
+    } catch (error) {
+      logger.error("Ошибка при добавлении сообщения в контекст", {
+        userId,
+        message,
+        error,
+      });
+      throw error;
+    }
   }
 
   /**
@@ -185,55 +137,99 @@ export class ContextService {
       return [];
     }
 
-    const messages = this.userContexts.get(userId) || [];
+    try {
+      // Получаем последние сообщения пользователя
+      const selectStmt = this.db.prepare(`
+        SELECT 
+          id, 
+          role, 
+          content, 
+          message_type, 
+          token_count, 
+          created_at
+        FROM user_contexts 
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `);
 
-    // Применяем ограничения
-    let filteredMessages = messages.slice(-contextSettings.maxMessages);
+      const rows = selectStmt.all(userId, contextSettings.maxMessages);
 
-    // Проверяем ограничение по токенам
-    if (contextSettings.maxTokens > 0) {
-      let totalTokens = 0;
-      const tokenLimitedMessages: ContextMessage[] = [];
+      // Преобразуем данные из базы в объекты сообщений
+      let messages: ContextMessage[] = rows.map((row: any) => ({
+        id: row.id,
+        role: row.role,
+        content: row.content,
+        messageType: row.message_type,
+        tokenCount: row.token_count,
+        timestamp: row.created_at,
+      }));
 
-      // Идем с конца, чтобы сохранить самые свежие сообщения
-      for (let i = filteredMessages.length - 1; i >= 0; i--) {
-        const message = filteredMessages[i];
-        const messageTokens =
-          message.tokenCount || this.estimateTokens(message.content);
+      // Возвращаем в правильном порядке (от старых к новым)
+      messages = messages.reverse();
 
-        if (totalTokens + messageTokens <= contextSettings.maxTokens) {
-          totalTokens += messageTokens;
-          tokenLimitedMessages.unshift(message);
-        } else {
-          break;
+      // Проверяем ограничение по токенам
+      if (contextSettings.maxTokens > 0) {
+        let totalTokens = 0;
+        const tokenLimitedMessages: ContextMessage[] = [];
+
+        // Идем с конца, чтобы сохранить самые свежие сообщения
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const message = messages[i];
+          const messageTokens =
+            message.tokenCount || this.estimateTokens(message.content);
+          if (totalTokens + messageTokens <= contextSettings.maxTokens) {
+            totalTokens += messageTokens;
+            tokenLimitedMessages.unshift(message);
+          } else {
+            break;
+          }
         }
+
+        messages = tokenLimitedMessages;
       }
 
-      filteredMessages = tokenLimitedMessages;
+      return messages;
+    } catch (error) {
+      logger.error("Ошибка при получении контекста пользователя", {
+        userId,
+        contextSettings,
+        error,
+      });
+      return [];
     }
-
-    return filteredMessages;
   }
 
   /**
    * Очищает контекст пользователя
+   * @param userId - ID пользователя
+   * @returns количество удаленных сообщений
    */
   public clearUserContext(userId: number): number {
-    const messages = this.userContexts.get(userId) || [];
-    const clearedCount = messages.length;
+    try {
+      const deleteStmt = this.db.prepare(`
+        DELETE FROM user_contexts WHERE user_id = ?
+      `);
 
-    this.userContexts.set(userId, []);
-    this.saveContexts();
+      const result = deleteStmt.run(userId);
+      const deletedCount = result.changes;
 
-    logger.logUserActivity(userId, undefined, "context_cleared", {
-      clearedMessages: clearedCount,
-    });
+      logger.logUserActivity(userId, undefined, "context_cleared", {
+        deletedMessages: deletedCount,
+      });
 
-    return clearedCount;
+      return deletedCount;
+    } catch (error) {
+      logger.error("Ошибка при очистке контекста пользователя", {
+        userId,
+        error,
+      });
+      throw error;
+    }
   }
 
   /**
-   * Автоматически очищает старые сообщения согласно настройкам
+   * Автоматическая очистка контекста при превышении лимитов
    */
   public autoCleanupContext(
     userId: number,
@@ -243,21 +239,37 @@ export class ContextService {
       return;
     }
 
-    const messages = this.userContexts.get(userId) || [];
-    const originalCount = messages.length;
+    try {
+      // Удаляем старые сообщения, превышающие лимит по количеству
+      const deleteOldStmt = this.db.prepare(`
+        DELETE FROM user_contexts 
+        WHERE user_id = ? 
+        AND id NOT IN (
+          SELECT id FROM user_contexts 
+          WHERE user_id = ? 
+          ORDER BY created_at DESC 
+          LIMIT ?
+        )
+      `);
 
-    if (messages.length > contextSettings.maxMessages) {
-      // Оставляем только последние сообщения
-      const cleanedMessages = messages.slice(-contextSettings.maxMessages);
-      this.userContexts.set(userId, cleanedMessages);
-      this.saveContexts();
-
-      const removedCount = originalCount - cleanedMessages.length;
-      logger.debug("Автоматическая очистка контекста", {
+      const deletedByCount = deleteOldStmt.run(
         userId,
-        originalCount,
-        removedCount,
-        remainingCount: cleanedMessages.length,
+        userId,
+        contextSettings.maxMessages
+      ).changes;
+
+      if (deletedByCount > 0) {
+        logger.debug("Автоочистка контекста по количеству сообщений", {
+          userId,
+          deletedMessages: deletedByCount,
+          maxMessages: contextSettings.maxMessages,
+        });
+      }
+    } catch (error) {
+      logger.error("Ошибка при автоочистке контекста", {
+        userId,
+        contextSettings,
+        error,
       });
     }
   }
@@ -271,27 +283,39 @@ export class ContextService {
     oldestMessage?: string;
     newestMessage?: string;
   } {
-    const messages = this.userContexts.get(userId) || [];
+    try {
+      const statsStmt = this.db.prepare(`
+        SELECT 
+          COUNT(*) as message_count,
+          SUM(token_count) as total_tokens,
+          MIN(created_at) as oldest_message,
+          MAX(created_at) as newest_message
+        FROM user_contexts 
+        WHERE user_id = ?
+      `);
 
-    const estimatedTokens = messages.reduce((total, message) => {
-      return (
-        total + (message.tokenCount || this.estimateTokens(message.content))
-      );
-    }, 0);
+      const result = statsStmt.get(userId);
 
-    return {
-      messageCount: messages.length,
-      estimatedTokens,
-      oldestMessage: messages.length > 0 ? messages[0].timestamp : undefined,
-      newestMessage:
-        messages.length > 0
-          ? messages[messages.length - 1].timestamp
-          : undefined,
-    };
+      return {
+        messageCount: result.message_count || 0,
+        estimatedTokens: result.total_tokens || 0,
+        oldestMessage: result.oldest_message,
+        newestMessage: result.newest_message,
+      };
+    } catch (error) {
+      logger.error("Ошибка при получении статистики контекста", {
+        userId,
+        error,
+      });
+      return {
+        messageCount: 0,
+        estimatedTokens: 0,
+      };
+    }
   }
 
   /**
-   * Форматирует контекст для отправки в Gemini API
+   * Форматирует контекст для использования в промте
    */
   public formatContextForPrompt(
     userId: number,
@@ -303,40 +327,45 @@ export class ContextService {
       return "";
     }
 
-    const contextLines = messages.map((message) => {
+    const formattedMessages = messages.map((message) => {
       const role = message.role === "user" ? "Пользователь" : "Ассистент";
-      const typeInfo =
-        message.messageType !== "text" ? ` [${message.messageType}]` : "";
-      return `${role}${typeInfo}: ${message.content}`;
+      return `${role}: ${message.content}`;
     });
 
-    return `\n\nКонтекст предыдущих сообщений:\n${contextLines.join("\n")}\n`;
+    return `\n\nПредыдущие сообщения:\n${formattedMessages.join("\n")}\n`;
   }
 
   /**
-   * Получает общую статистику всех контекстов
+   * Получает глобальную статистику контекстов
    */
   public getGlobalStats(): {
     totalUsers: number;
     totalMessages: number;
     averageMessagesPerUser: number;
   } {
-    const totalUsers = this.userContexts.size;
-    const totalMessages = Array.from(this.userContexts.values()).reduce(
-      (sum, messages) => sum + messages.length,
-      0
-    );
+    try {
+      const statsStmt = this.db.prepare(`
+        SELECT 
+          COUNT(DISTINCT user_id) as total_users,
+          COUNT(*) as total_messages,
+          CAST(COUNT(*) AS FLOAT) / COUNT(DISTINCT user_id) as avg_messages_per_user
+        FROM user_contexts
+      `);
 
-    const averageMessagesPerUser =
-      totalUsers > 0 ? totalMessages / totalUsers : 0;
+      const result = statsStmt.get();
 
-    return {
-      totalUsers,
-      totalMessages,
-      averageMessagesPerUser: Math.round(averageMessagesPerUser * 100) / 100,
-    };
+      return {
+        totalUsers: result.total_users || 0,
+        totalMessages: result.total_messages || 0,
+        averageMessagesPerUser: Math.round(result.avg_messages_per_user || 0),
+      };
+    } catch (error) {
+      logger.error("Ошибка при получении глобальной статистики", error);
+      return {
+        totalUsers: 0,
+        totalMessages: 0,
+        averageMessagesPerUser: 0,
+      };
+    }
   }
 }
-
-// Экспортируем singleton экземпляр
-export const contextService = ContextService.getInstance();

@@ -5,3 +5,4 @@ export * from "./imageService";
 export * from "./userSettingsService";
 export * from "./loggerService";
 export * from "./contextService";
+export * from "./databaseService";

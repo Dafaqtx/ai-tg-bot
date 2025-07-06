@@ -3,11 +3,15 @@ import {
   AudioService,
   ImageService,
   logger,
-  userSettingsService,
-  contextService,
+  UserSettingsService,
+  ContextService,
 } from "../services";
 import { BotContext, AudioMessageType, FileInfo } from "../types";
 import { safeReply } from "../utils";
+
+// Создаем экземпляры сервисов
+const userSettingsService = UserSettingsService.getInstance();
+const contextService = ContextService.getInstance();
 
 /**
  * Класс для обработки различных типов сообщений

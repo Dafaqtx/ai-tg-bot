@@ -1,7 +1,3 @@
-import fs from "fs";
-
-import path from "path";
-
 import {
   UserSettings,
   ResponseStyle,
@@ -10,6 +6,7 @@ import {
 } from "../types";
 
 import { DEFAULT_CONTEXT_SETTINGS } from "./contextService";
+import { DatabaseService } from "./databaseService";
 import { logger } from "./loggerService";
 
 /**
@@ -81,18 +78,14 @@ export const STYLE_DESCRIPTIONS: StyleDescription[] = [
 
 /**
  * Сервис для управления настройками пользователей
- * Сохраняет настройки в JSON файл для персистентности
+ * Использует SQLite базу данных для хранения настроек
  */
 export class UserSettingsService {
   private static instance: UserSettingsService;
-  private settingsFile: string;
-  private userSettings: Map<number, UserSettings> = new Map();
+  private db: DatabaseService;
 
   constructor() {
-    // Создаем путь к файлу настроек
-    this.settingsFile = path.join(process.cwd(), "data", "user-settings.json");
-    this.ensureDataDirectory();
-    this.loadSettings();
+    this.db = DatabaseService.getInstance();
   }
 
   /**
@@ -106,81 +99,52 @@ export class UserSettingsService {
   }
 
   /**
-   * Создает директорию data если её нет
-   */
-  private ensureDataDirectory(): void {
-    const dataDir = path.join(process.cwd(), "data");
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-      logger.info("Создана директория для данных", { path: dataDir });
-    }
-  }
-
-  /**
-   * Загружает настройки из файла
-   */
-  private loadSettings(): void {
-    try {
-      if (fs.existsSync(this.settingsFile)) {
-        const data = fs.readFileSync(this.settingsFile, "utf8");
-        const settings: UserSettings[] = JSON.parse(data);
-
-        // Преобразуем массив в Map для быстрого доступа
-        this.userSettings.clear();
-        settings.forEach((setting) => {
-          // Миграция: добавляем настройки контекста для старых пользователей
-          if (!setting.contextSettings) {
-            setting.contextSettings = { ...DEFAULT_CONTEXT_SETTINGS };
-          }
-          this.userSettings.set(setting.userId, setting);
-        });
-
-        logger.info("Настройки пользователей загружены", {
-          usersCount: settings.length,
-        });
-      } else {
-        logger.info("Файл настроек не найден, создаем новый");
-        this.saveSettings();
-      }
-    } catch (error) {
-      logger.error("Ошибка при загрузке настроек пользователей", error);
-      // В случае ошибки инициализируем пустую Map
-      this.userSettings.clear();
-    }
-  }
-
-  /**
-   * Сохраняет настройки в файл
-   */
-  private saveSettings(): void {
-    try {
-      const settings = Array.from(this.userSettings.values());
-      fs.writeFileSync(
-        this.settingsFile,
-        JSON.stringify(settings, null, 2),
-        "utf8"
-      );
-
-      logger.debug("Настройки пользователей сохранены", {
-        usersCount: settings.length,
-      });
-    } catch (error) {
-      logger.error("Ошибка при сохранении настроек пользователей", error);
-    }
-  }
-
-  /**
    * Получает настройки пользователя или создает настройки по умолчанию
    * @param userId - ID пользователя
    * @param username - имя пользователя (опционально)
    * @returns настройки пользователя
    */
   public getUserSettings(userId: number, username?: string): UserSettings {
-    let settings = this.userSettings.get(userId);
+    try {
+      // Подготавливаем запрос на получение настроек
+      const selectStmt = this.db.prepare(`
+        SELECT 
+          user_id,
+          username,
+          response_style,
+          context_enabled,
+          context_max_messages,
+          context_max_tokens,
+          context_auto_cleanup,
+          created_at,
+          updated_at
+        FROM user_settings 
+        WHERE user_id = ?
+      `);
 
-    if (!settings) {
+      const row = selectStmt.get(userId);
+
+      if (row) {
+        // Преобразуем данные из базы в объект настроек
+        const settings: UserSettings = {
+          userId: row.user_id,
+          username: row.username,
+          responseStyle: row.response_style as ResponseStyle,
+          contextSettings: {
+            enabled: Boolean(row.context_enabled),
+            maxMessages: row.context_max_messages,
+            maxTokens: row.context_max_tokens,
+            autoCleanup: Boolean(row.context_auto_cleanup),
+          },
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        };
+
+        return settings;
+      }
+
       // Создаем настройки по умолчанию для нового пользователя
-      settings = {
+      const defaultSettings: UserSettings = {
         userId,
         username,
         responseStyle: "friendly", // По умолчанию дружелюбный стиль
@@ -189,16 +153,43 @@ export class UserSettingsService {
         updatedAt: new Date().toISOString(),
       };
 
-      this.userSettings.set(userId, settings);
-      this.saveSettings();
+      // Сохраняем новые настройки в базу
+      const insertStmt = this.db.prepare(`
+        INSERT INTO user_settings (
+          user_id, 
+          username, 
+          response_style,
+          context_enabled,
+          context_max_messages,
+          context_max_tokens,
+          context_auto_cleanup
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      insertStmt.run(
+        userId,
+        username,
+        defaultSettings.responseStyle,
+        defaultSettings.contextSettings.enabled ? 1 : 0,
+        defaultSettings.contextSettings.maxMessages,
+        defaultSettings.contextSettings.maxTokens,
+        defaultSettings.contextSettings.autoCleanup ? 1 : 0
+      );
 
       logger.logUserActivity(userId, username, "settings_created", {
-        defaultStyle: settings.responseStyle,
-        contextEnabled: settings.contextSettings.enabled,
+        defaultStyle: defaultSettings.responseStyle,
+        contextEnabled: defaultSettings.contextSettings.enabled,
       });
-    }
 
-    return settings;
+      return defaultSettings;
+    } catch (error) {
+      logger.error("Ошибка при получении настроек пользователя", {
+        userId,
+        username,
+        error,
+      });
+      throw error;
+    }
   }
 
   /**
@@ -213,26 +204,36 @@ export class UserSettingsService {
     responseStyle: ResponseStyle,
     username?: string
   ): UserSettings {
-    const settings = this.getUserSettings(userId, username);
-    const oldStyle = settings.responseStyle;
+    try {
+      // Обновляем стиль в базе данных
+      const updateStmt = this.db.prepare(`
+        UPDATE user_settings 
+        SET response_style = ?, username = COALESCE(?, username)
+        WHERE user_id = ?
+      `);
 
-    settings.responseStyle = responseStyle;
-    settings.updatedAt = new Date().toISOString();
+      const result = updateStmt.run(responseStyle, username, userId);
 
-    // Обновляем username если передан
-    if (username) {
-      settings.username = username;
+      if (result.changes === 0) {
+        // Пользователь не найден, создаем новые настройки
+        return this.getUserSettings(userId, username);
+      }
+
+      logger.logUserActivity(userId, username, "style_updated", {
+        newStyle: responseStyle,
+      });
+
+      // Возвращаем обновленные настройки
+      return this.getUserSettings(userId, username);
+    } catch (error) {
+      logger.error("Ошибка при обновлении стиля пользователя", {
+        userId,
+        responseStyle,
+        username,
+        error,
+      });
+      throw error;
     }
-
-    this.userSettings.set(userId, settings);
-    this.saveSettings();
-
-    logger.logUserActivity(userId, username, "style_changed", {
-      oldStyle,
-      newStyle: responseStyle,
-    });
-
-    return settings;
   }
 
   /**
@@ -248,16 +249,16 @@ export class UserSettingsService {
 
   /**
    * Получает все доступные стили
-   * @returns массив описаний стилей
+   * @returns массив всех стилей
    */
   public getAllStyles(): StyleDescription[] {
     return STYLE_DESCRIPTIONS;
   }
 
   /**
-   * Проверяет, является ли стиль валидным
-   * @param style - стиль для проверки
-   * @returns true если стиль валидный
+   * Проверяет, является ли строка валидным стилем
+   * @param style - строка для проверки
+   * @returns true, если стиль валиден
    */
   public isValidStyle(style: string): style is ResponseStyle {
     return STYLE_DESCRIPTIONS.some((desc) => desc.key === style);
@@ -265,27 +266,39 @@ export class UserSettingsService {
 
   /**
    * Получает статистику использования стилей
-   * @returns объект со статистикой
+   * @returns объект с количеством пользователей для каждого стиля
    */
   public getStyleStats(): Record<ResponseStyle, number> {
-    const stats: Record<ResponseStyle, number> = {
-      detailed: 0,
-      concise: 0,
-      friendly: 0,
-      expert: 0,
-      medical: 0,
-      educational: 0,
-      motivational: 0,
-      developer: 0,
-      humorous: 0,
-      calm: 0,
-    };
+    try {
+      const statsStmt = this.db.prepare(`
+        SELECT response_style, COUNT(*) as count 
+        FROM user_settings 
+        GROUP BY response_style
+      `);
 
-    this.userSettings.forEach((settings) => {
-      stats[settings.responseStyle]++;
-    });
+      const rows = statsStmt.all();
+      const stats: Record<ResponseStyle, number> = {} as Record<
+        ResponseStyle,
+        number
+      >;
 
-    return stats;
+      // Инициализируем все стили нулями
+      STYLE_DESCRIPTIONS.forEach((style) => {
+        stats[style.key] = 0;
+      });
+
+      // Заполняем реальными данными
+      rows.forEach((row: { response_style: string; count: number }) => {
+        if (this.isValidStyle(row.response_style)) {
+          stats[row.response_style as ResponseStyle] = row.count;
+        }
+      });
+
+      return stats;
+    } catch (error) {
+      logger.error("Ошибка при получении статистики стилей", error);
+      throw error;
+    }
   }
 
   /**
@@ -300,29 +313,52 @@ export class UserSettingsService {
     contextSettings: Partial<ContextSettings>,
     username?: string
   ): UserSettings {
-    const settings = this.getUserSettings(userId, username);
+    try {
+      // Получаем текущие настройки
+      const currentSettings = this.getUserSettings(userId, username);
 
-    // Обновляем только переданные настройки
-    settings.contextSettings = {
-      ...settings.contextSettings,
-      ...contextSettings,
-    };
+      // Объединяем с новыми настройками
+      const newContextSettings = {
+        ...currentSettings.contextSettings,
+        ...contextSettings,
+      };
 
-    settings.updatedAt = new Date().toISOString();
+      // Обновляем в базе данных
+      const updateStmt = this.db.prepare(`
+        UPDATE user_settings 
+        SET 
+          context_enabled = ?,
+          context_max_messages = ?,
+          context_max_tokens = ?,
+          context_auto_cleanup = ?,
+          username = COALESCE(?, username)
+        WHERE user_id = ?
+      `);
 
-    // Обновляем username если передан
-    if (username) {
-      settings.username = username;
+      updateStmt.run(
+        newContextSettings.enabled ? 1 : 0,
+        newContextSettings.maxMessages,
+        newContextSettings.maxTokens,
+        newContextSettings.autoCleanup ? 1 : 0,
+        username,
+        userId
+      );
+
+      logger.logUserActivity(userId, username, "context_settings_updated", {
+        newSettings: newContextSettings,
+      });
+
+      // Возвращаем обновленные настройки
+      return this.getUserSettings(userId, username);
+    } catch (error) {
+      logger.error("Ошибка при обновлении настроек контекста", {
+        userId,
+        contextSettings,
+        username,
+        error,
+      });
+      throw error;
     }
-
-    this.userSettings.set(userId, settings);
-    this.saveSettings();
-
-    logger.logUserActivity(userId, username, "context_settings_changed", {
-      newSettings: contextSettings,
-    });
-
-    return settings;
   }
 
   /**
@@ -330,9 +366,16 @@ export class UserSettingsService {
    * @returns количество пользователей
    */
   public getUsersCount(): number {
-    return this.userSettings.size;
+    try {
+      const countStmt = this.db.prepare(`
+        SELECT COUNT(*) as count FROM user_settings
+      `);
+
+      const result = countStmt.get();
+      return result.count;
+    } catch (error) {
+      logger.error("Ошибка при получении количества пользователей", error);
+      throw error;
+    }
   }
 }
-
-// Экспортируем singleton экземпляр
-export const userSettingsService = UserSettingsService.getInstance();
